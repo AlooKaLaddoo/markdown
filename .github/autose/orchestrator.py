@@ -323,6 +323,14 @@ def build(args):
             n += 1
             bchk = stage_implement(run, spec, design, impl, base, feedback, n, issue_no, writes_tests, impl_review,
                                    args.start_sha or base)
+            agent_error = bchk.data.get("agent_error") or ""
+            if "limit" in agent_error.lower() or "budget" in agent_error.lower():
+                # ADR-009: a hit usage/budget limit stops the run. Run 45423758931 showed that otherwise the
+                # unchanged code of the previous round passes the checks and is released again.
+                run.state["stages"]["implementation"] = {"ok": False, "attempts": n, "problems": [agent_error]}
+                write_test_report(run, issue_no, ac_chk, on_base, attempts, None, baseline)
+                run.finish("failed", f"stage 3: implementer stopped by a limit: {agent_error[:200]}")
+                return
             attempt = {"n": n, "build": bchk.ok, "note": "; ".join(bchk.problems)}
             attempts.append(attempt)
             run.state["stages"]["implementation"] = {"ok": bchk.ok, "attempts": n, "problems": bchk.problems,
