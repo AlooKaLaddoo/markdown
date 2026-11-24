@@ -13,7 +13,8 @@
 # License: [BSD](https://opensource.org/licenses/bsd-license.php)
 
 """
-Converts `[[WikiLinks]]` to relative links.
+Converts `[[WikiLinks]]` to relative links. Custom link text may be given
+with `[[Page Name|link text]]`.
 
 See the [documentation](https://Python-Markdown.github.io/extensions/wikilinks)
 for details.
@@ -59,7 +60,9 @@ class WikiLinkExtension(Extension):
         self.md = md
 
         # append to end of inline patterns
-        WIKILINK_RE = r'\[\[([\w0-9_ -]+)\]\]'
+        # Group 1 is the page name; optional group 2 is the link text after the
+        # first `|` (it may not contain `]]` or a newline).
+        WIKILINK_RE = r'\[\[([\w0-9_ -]+)(?:\|((?:(?!\]\])[^\n])*))?\]\]'
         wikilinkPattern = WikiLinksInlineProcessor(WIKILINK_RE, self.getConfigs())
         wikilinkPattern.md = md
         md.inlinePatterns.register(wikilinkPattern, 'wikilink', 75)
@@ -77,8 +80,9 @@ class WikiLinksInlineProcessor(InlineProcessor):
             base_url, end_url, html_class = self._getMeta()
             label = m.group(1).strip()
             url = self.config['build_url'](label, base_url, end_url)
+            text = (m.group(2) or '').strip()
             a = etree.Element('a')
-            a.text = label
+            a.text = text or label
             a.set('href', url)
             if html_class:
                 a.set('class', html_class)

@@ -53,6 +53,26 @@ extensions: [wikilinks]
 [[Wiki Link]]
 ```
 
+To display text other than the page name, add the link text after a pipe
+(`|`): ``[[Page Name|link text]]``. The URL (and class) is built from the page
+name only, exactly as for ``[[Page Name]]``; the link text is only used as the
+text of the link.
+
+``` md-render
+---
+extensions: [wikilinks]
+---
+[[Wiki Link|see the wiki]]
+```
+
+Whitespace around the page name and the link text is ignored. If the link text
+is empty (``[[Page Name|]]``), the page name is used as the text. Only the first
+`|` separates the page name from the link text; any later `|` is part of the
+link text. The link text cannot contain `]]` or a line break and is intended to
+be plain text. Note that this form does not work inside the cells of a table
+created by the [Tables](tables.md) extension, as the `|` is treated as a cell
+separator there.
+
 ## Usage
 
 See [Extensions](index.md) for general extension usage. Use `wikilinks` as the
