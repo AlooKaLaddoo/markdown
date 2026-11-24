@@ -518,8 +518,10 @@ def release(args):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     issue_no = int(args.issue)
-    branch = f"autose/issue-{issue_no}"
-    info = {"branch": branch, "ok": False}
+    variant = args.variant or "main"
+    # Experiment variants get their own branch and PR so they never mix with the main design's PR.
+    branch = f"autose/issue-{issue_no}" + ("" if variant == "main" else f"-{variant}")
+    info = {"branch": branch, "variant": variant, "ok": False}
     try:
         exists = sh(["git", "ls-remote", "--heads", "origin", branch])
         if exists:
@@ -544,7 +546,8 @@ def release(args):
             gh("pr", "edit", str(info["pr"]), "--body-file", str(out / "pr.md"))
         else:
             url = gh("pr", "create", "--base", args.base_branch, "--head", branch,
-                     "--title", f"autose: {title} (#{issue_no})", "--body-file", str(out / "pr.md"))
+                     "--title", f"autose: {title} (#{issue_no})" + ("" if variant == "main" else f" [{variant}]"),
+                     "--body-file", str(out / "pr.md"))
             info["url"] = url
             info["pr"] = int(url.rstrip("/").split("/")[-1])
         # Pushes made with GITHUB_TOKEN do not trigger other workflows, so CI is dispatched explicitly.
@@ -597,7 +600,7 @@ def upsert_state_comment(repo: str, issue_no: int, entry: dict):
     state["rounds"] = [r for r in state["rounds"] if r.get("run_id") != entry["run_id"]] + [entry]
     rows = ["| Round | Run | From stage | Build | PR | CI | Review | Next |", "|---|---|---|---|---|---|---|---|"]
     for r in state["rounds"]:
-        rows.append(f"| {r['round']} | [{r['run_id']}]({r['run_url']}) | {r['from_stage']} | {r['build']} | "
+        rows.append(f"| {r['round']} | [{r['run_id']}]({r['run_url']}) | {r['from_stage']}{'' if r.get('variant', 'main') == 'main' else ' (' + r['variant'] + ')'} | {r['build']} | "
                     f"{('#' + str(r['pr'])) if r.get('pr') else '-'} | {r.get('ci', '-')} | {r.get('review', '-')} | "
                     f"{r['next']} |")
     body = (f"{STATE_MARKER}\n### AutoSE status for #{issue_no}\n\n" + "\n".join(rows) + "\n\n"
@@ -677,6 +680,7 @@ def main():
     rl = sub.add_parser("release")
     for a in ("art", "out", "issue", "issue-json", "round", "base-sha", "base-branch", "run-url"):
         rl.add_argument(f"--{a}", required=True)
+    rl.add_argument("--variant", default="main")
     ro = sub.add_parser("route")
     for a in ("issue", "round", "from-stage", "mode", "run-id", "run-url", "default-branch"):
         ro.add_argument(f"--{a}", required=True)

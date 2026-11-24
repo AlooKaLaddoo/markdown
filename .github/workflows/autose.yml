@@ -47,7 +47,8 @@ concurrency:
     ${{ (github.event_name == 'workflow_dispatch'
          || (github.event_name == 'issues' && github.event.label.name == 'autose')
          || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/autose')))
-        && format('autose-{0}', github.event.issue.number || (inputs.mode == 'review' && inputs.pr) || inputs.issue)
+        && format('autose-{0}-{1}', github.event.issue.number || (inputs.mode == 'review' && inputs.pr) || inputs.issue,
+                  inputs.variant || 'main')
         || format('autose-noop-{0}', github.run_id) }}
   cancel-in-progress: false
 
@@ -148,13 +149,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ needs.gate.outputs.issue }}
           PREV: ${{ needs.gate.outputs.prev_run_id }}
+          VARIANT: ${{ needs.gate.outputs.variant }}
         run: |
           set -euo pipefail
           gh issue view "$ISSUE" --json number,title,body,author,labels > "$RUNNER_TEMP/issue.json"
           echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           start=""
-          if git ls-remote --exit-code --heads origin "autose/issue-$ISSUE" >/dev/null; then
-            git fetch -q origin "autose/issue-$ISSUE"; start=$(git rev-parse FETCH_HEAD)
+          branch="autose/issue-$ISSUE"; [ "$VARIANT" != "main" ] && branch="$branch-$VARIANT"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            git fetch -q origin "$branch"; start=$(git rev-parse FETCH_HEAD)
           fi
           echo "start_sha=$start" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/prev"
@@ -221,6 +224,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ needs.gate.outputs.issue }}
           ROUND: ${{ needs.gate.outputs.round }}
+          VARIANT: ${{ needs.gate.outputs.variant }}
           BASE: ${{ needs.build.outputs.base_sha }}
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -230,7 +234,7 @@ jobs:
           cp -r .github/autose "$RUNNER_TEMP/autose"   # run the trusted copy; the checkout changes below
           python "$RUNNER_TEMP/autose/orchestrator.py" release --art "$RUNNER_TEMP/art" --out "$RUNNER_TEMP/rel" \
             --issue "$ISSUE" --issue-json "$RUNNER_TEMP/issue.json" --round "$ROUND" --base-sha "$BASE" \
-            --base-branch "$BASE_BRANCH" --run-url "$RUN_URL"
+            --base-branch "$BASE_BRANCH" --run-url "$RUN_URL" --variant "$VARIANT"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
