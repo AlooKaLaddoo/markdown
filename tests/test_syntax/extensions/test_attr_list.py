@@ -231,6 +231,12 @@ class TestAttrListValuelessAttributes(TestCase):
             '<h1 download>Heading</h1>'
         )
 
+    def test_valueless_id_on_heading(self):
+        self.assertMarkdownRenders(
+            '# Title {id}',
+            '<h1 id>Title</h1>'
+        )
+
     def test_get_attrs_and_remainder_marks_valueless_as_none(self):
         from markdown.extensions.attr_list import get_attrs_and_remainder
         attrs, remainder = get_attrs_and_remainder('download checked key=value .cls #the-id')

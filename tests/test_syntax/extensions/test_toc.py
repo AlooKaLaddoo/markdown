@@ -1033,6 +1033,81 @@ class TestTOC(TestCase):
             extensions=['toc']
         )
 
+    def test_valueless_id(self):
+        self.assertMarkdownRenders(
+            '#d {id}',
+            '<h1 id="d">d</h1>',
+            extensions=['toc', 'attr_list']
+        )
+
+    def test_valueless_id_with_toc_marker(self):
+        self.assertMarkdownRenders(
+            '[TOC]\n\n# Some Title {id}',
+            self.dedent(
+                '''
+                <div class="toc">
+                <ul>
+                <li><a href="#some-title">Some Title</a></li>
+                </ul>
+                </div>
+                <h1 id="some-title">Some Title</h1>
+                '''
+            ),
+            expected_attrs={
+                'toc_tokens': [
+                    {
+                        'level': 1,
+                        'id': 'some-title',
+                        'name': 'Some Title',
+                        'html': 'Some Title',
+                        'data-toc-label': '',
+                        'children': []
+                    }
+                ]
+            },
+            extensions=['toc', 'attr_list']
+        )
+
+    def test_valueless_id_unique(self):
+        self.assertMarkdownRenders(
+            '# Title\n\n# Title {id}',
+            '<h1 id="title">Title</h1>\n<h1 id="title_1">Title</h1>',
+            extensions=['toc', 'attr_list']
+        )
+
+    def test_valueless_id_with_other_attrs(self):
+        self.assertMarkdownRenders(
+            '# Title {id .cls}',
+            '<h1 class="cls" id="title">Title</h1>',
+            extensions=['toc', 'attr_list']
+        )
+
+    def test_valueless_id_with_permalink(self):
+        self.assertMarkdownRenders(
+            '# Title {id}',
+            '<h1 id="title">Title<a class="headerlink" href="#title" title="Permanent link">&para;</a></h1>',
+            extensions=['attr_list', TocExtension(permalink=True)]
+        )
+
+    def test_valueless_id_with_anchorlink(self):
+        self.assertMarkdownRenders(
+            '# Title {id}',
+            '<h1 id="title"><a class="toclink" href="#title">Title</a></h1>',
+            extensions=['attr_list', TocExtension(anchorlink=True)]
+        )
+
+    def test_explicit_id_with_attr_list(self):
+        md = Markdown(extensions=['toc', 'attr_list'])
+        self.assertEqual(md.convert('# Title {#my-id}'), '<h1 id="my-id">Title</h1>')
+        self.assertEqual(md.toc_tokens[0]['id'], 'my-id')
+
+    def test_no_id_with_attr_list(self):
+        self.assertMarkdownRenders(
+            '# Title',
+            '<h1 id="title">Title</h1>',
+            extensions=['toc', 'attr_list']
+        )
+
     def test_escaped_char_in_id(self):
         self.assertMarkdownRenders(
             r'# escaped\_character',

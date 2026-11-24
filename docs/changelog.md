@@ -16,6 +16,8 @@ See the [Contributing Guide](contributing.md) for details.
 
 ### Fixed
 
+* Fix a `TypeError` in the `toc` extension when a heading has a valueless
+  `{id}` attribute; a slug is now generated as if no id was given.
 * Support automatic links with URL schemes other than HTTP and FTP, such as
   `<ssh://example.org>` (#1244).
 * Fix quadratic-time id generation in the `toc` extension when many headers
