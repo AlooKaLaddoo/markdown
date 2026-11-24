@@ -181,7 +181,7 @@ def acceptance_test_path(issue_no: int) -> str:
 
 
 def stage_implement(run: Run, spec: str, design: str, impl: Path, base: str, feedback: str, attempt: int,
-                    issue_no: int, writes_tests: bool, review_md: str) -> checks.Check:
+                    issue_no: int, writes_tests: bool, review_md: str, start: str) -> checks.Check:
     test_path = acceptance_test_path(issue_no)
     prompt = ("Implement the change described by the specification and the design below, in this repository.\n\n"
               f"<spec>\n{spec}\n</spec>\n\n<design>\n{design}\n</design>\n")
@@ -203,7 +203,9 @@ def stage_implement(run: Run, spec: str, design: str, impl: Path, base: str, fee
     def forbidden(f: str) -> bool:
         protected = f.startswith((".github/", ".claude/")) or f == "CLAUDE.md"
         return protected or (not writes_tests and f == test_path)
-    reverted = checks.enforce_allowlist(impl, base, allowed=lambda f: True, forbidden=forbidden)
+    # Compare with the round's starting commit: in round 2+ the acceptance tests already exist on the branch.
+    reverted = checks.enforce_allowlist(impl, start, allowed=lambda f: True, forbidden=forbidden)
+    checks.changed_files(impl, base)  # also drops sandbox placeholder files relative to the base
     if reverted:
         run.log("implementation", "reverted out-of-scope changes", ", ".join(reverted))
     chk = checks.check_build(impl, base)
@@ -318,7 +320,8 @@ def build(args):
     while True:
         for _ in range(BUDGET["impl_attempts_per_design"]):
             n += 1
-            bchk = stage_implement(run, spec, design, impl, base, feedback, n, issue_no, writes_tests, impl_review)
+            bchk = stage_implement(run, spec, design, impl, base, feedback, n, issue_no, writes_tests, impl_review,
+                                   args.start_sha or base)
             attempt = {"n": n, "build": bchk.ok, "note": "; ".join(bchk.problems)}
             attempts.append(attempt)
             run.state["stages"]["implementation"] = {"ok": bchk.ok, "attempts": n, "problems": bchk.problems,

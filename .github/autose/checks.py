@@ -144,8 +144,22 @@ def run(cmd: list[str] | str, cwd: Path, timeout: int = 900) -> tuple[int, str]:
     return p.returncode, (p.stdout + p.stderr)
 
 
+# Claude Code's Bash sandbox (bubblewrap) creates empty placeholder files for sensitive paths in the working
+# directory and leaves them behind (seen in run 45420334361, PR #11). They are never part of a change.
+SANDBOX_STUBS = {".env", ".env.local", ".env.development", ".env.development.local", ".env.production",
+                 ".env.production.local", ".env.test", ".env.test.local", ".gitmodules", ".npmrc", ".yarnrc",
+                 ".yarnrc.yml", "bunfig.toml", "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+                 ".mcp.json", ".bashrc", ".profile", ".gitconfig"}
+
+
 def changed_files(worktree: Path, base: str) -> list[str]:
     run(["git", "add", "-A"], worktree)
+    _, out = run(["git", "diff", "--cached", "--name-only", "--diff-filter=A", base], worktree)
+    for f in out.splitlines():
+        p = worktree / f
+        if "/" not in f and (f in SANDBOX_STUBS or f.startswith(".env")) and p.is_file() and p.stat().st_size == 0:
+            run(["git", "rm", "-q", "-f", "--cached", f], worktree)
+            p.unlink(missing_ok=True)
     _, out = run(["git", "diff", "--cached", "--name-only", base], worktree)
     return [l for l in out.splitlines() if l]
 
