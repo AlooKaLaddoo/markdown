@@ -1217,6 +1217,53 @@ class TestTOC(TestCase):
             extensions=[TocExtension(permalink=True, permalink_title="パーマリンク", slugify=slugify_unicode)]
         )
 
+    def testNonLatinFallbackID(self):
+        self.assertMarkdownRenders(
+            '# Введение\n\n# Введение\n\n# Setup Настройка\n\n# !!!',
+            '<h1 id="введение">Введение</h1>\n'
+            '<h1 id="введение_1">Введение</h1>\n'
+            '<h1 id="setup">Setup Настройка</h1>\n'
+            '<h1 id="_1">!!!</h1>',
+            extensions=['toc']
+        )
+
+    def testNonLatinFallbackTOCLink(self):
+        self.assertMarkdownRenders(
+            '[TOC]\n\n# Быстрый старт',
+            '<div class="toc">\n'
+            '<ul>\n'
+            '<li><a href="#быстрый-старт">Быстрый старт</a></li>\n'
+            '</ul>\n'
+            '</div>\n'
+            '<h1 id="быстрый-старт">Быстрый старт</h1>',
+            extensions=['toc']
+        )
+
+    def testCombiningMarksKept(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertMarkdownRenders(
+            '# परिचय',
+            '<h1 id="परिचय">परिचय</h1>',
+            extensions=['toc']
+        )
+        self.assertMarkdownRenders(
+            '# नमस्ते दुनिया',
+            '<h1 id="नमस्ते-दुनिया">नमस्ते दुनिया</h1>',
+            extensions=[TocExtension(slugify=slugify_unicode)]
+        )
+
+    def testCustomSlugifyNotAffectedByFallback(self):
+        self.assertMarkdownRenders(
+            '# Введение',
+            '<h1 id="custom">Введение</h1>',
+            extensions=[TocExtension(slugify=lambda value, separator: 'custom')]
+        )
+
+    def testSlugifyASCIIStripsAccents(self):
+        from markdown.extensions.toc import slugify
+        self.assertEqual(slugify('Žlutý kůň', '-'), 'zluty-kun')
+        self.assertEqual(slugify('Настройка', '-'), 'настройка')
+
     def testPermalinkWithExtendedLatinInID(self):
         self.assertMarkdownRenders(
             '# Théâtre',

@@ -37,13 +37,28 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 def slugify(value: str, separator: str, unicode: bool = False) -> str:
-    """ Slugify a string, to make it URL friendly. """
+    """ Slugify a string, to make it URL friendly.
+
+    With `unicode=False`, the result is ASCII only. If the ASCII slug would be empty (for example,
+    for a heading written entirely in a non-Latin script), the Unicode slug is returned instead.
+    Unicode slugs keep combining marks (categories `Mn` and `Mc`), such as Devanagari vowel signs.
+    """
+    original = value
     if not unicode:
         # Replace Extended Latin characters with ASCII, i.e. `žlutý` => `zluty`
         value = unicodedata.normalize('NFKD', value)
         value = value.encode('ascii', 'ignore').decode('ascii')
-    value = re.sub(r'[^\w\s-]', '', value).strip().lower()
-    return re.sub(r'[{}\s]+'.format(separator), separator, value)
+    value = ''.join(
+        c for c in value if _SLUG_CHAR_RE.match(c) or unicodedata.category(c) in ('Mn', 'Mc')
+    ).strip().lower()
+    value = re.sub(r'[{}\s]+'.format(separator), separator, value)
+    if not value and not unicode:
+        # Fall back to a Unicode slug of the original (un-normalized) text.
+        return slugify(original, separator, unicode=True)
+    return value
+
+
+_SLUG_CHAR_RE = re.compile(r'[\w\s-]')
 
 
 def slugify_unicode(value: str, separator: str) -> str:
