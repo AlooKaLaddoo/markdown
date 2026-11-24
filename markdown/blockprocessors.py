@@ -448,6 +448,11 @@ class UListProcessor(OListProcessor):
     TAG: str = 'ul'
     """ The tag used for the the wrapping element. """
 
+
+    def test(self, parent: etree.Element, block: str) -> bool:
+        # Stop nesting unordered lists before Python's recursion limit is reached.
+        return bool(self.RE.match(block)) and not util.nearing_recursion_limit()
+
     def __init__(self, parser: BlockParser):
         super().__init__(parser)
         # Detect an item (`1. item`). `group(1)` contains contents of item.
