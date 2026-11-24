@@ -1,0 +1,362 @@
+# AutoSE: issue in, reviewed pull request out.
+# Design: see the submission repository (architecture/views, architecture/decisions ADR-001..).
+name: autose
+
+on:
+  issues:
+    types: [labeled]          # a maintainer adds the label "autose"
+  issue_comment:
+    types: [created]          # "/autose" on an issue, "/autose review" on a PR
+  workflow_dispatch:          # review rounds (dispatched by the route job) and experiments
+    inputs:
+      issue:
+        description: Issue number
+        required: true
+      round:
+        description: Round number (1 = first attempt)
+        default: "1"
+      from_stage:
+        description: Stage to start from
+        type: choice
+        options: [requirements, design, implementation]
+        default: requirements
+      prev_run_id:
+        description: Run id of the previous round (its artifacts are reused)
+        default: ""
+      mode:
+        description: full = stages 1-6, review = stage 6 only on an existing PR
+        type: choice
+        options: [full, review]
+        default: full
+      pr:
+        description: PR number (mode=review)
+        default: ""
+      variant:
+        description: Design variant (decision experiments)
+        type: choice
+        options: [main, e1_friendly_reviewer, e2_implementer_writes_tests]
+        default: main
+
+# Nothing by default; every job asks for exactly what it needs (ADR-005).
+permissions: {}
+
+# One run per issue/PR at a time (ADR-010). Events that are not triggers (other labels, ordinary
+# comments, including the bot's own) get a unique group so they never displace a queued round.
+concurrency:
+  group: >-
+    ${{ (github.event_name == 'workflow_dispatch'
+         || (github.event_name == 'issues' && github.event.label.name == 'autose')
+         || (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/autose')))
+        && format('autose-{0}', github.event.issue.number || (inputs.mode == 'review' && inputs.pr) || inputs.issue)
+        || format('autose-noop-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+env:
+  CLAUDE_CODE_VERSION: "2.1.331"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ------------------------------------------------------------------ who / what / which mode
+  gate:
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 2
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'issues' && github.event.label.name == 'autose')
+      || (github.event_name == 'issue_comment'
+          && startsWith(github.event.comment.body, '/autose')
+          && github.event.comment.user.type != 'Bot'
+          && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    outputs:
+      mode: ${{ steps.ctx.outputs.mode }}
+      issue: ${{ steps.ctx.outputs.issue }}
+      pr: ${{ steps.ctx.outputs.pr }}
+      round: ${{ steps.ctx.outputs.round }}
+      from_stage: ${{ steps.ctx.outputs.from_stage }}
+      prev_run_id: ${{ steps.ctx.outputs.prev_run_id }}
+      variant: ${{ steps.ctx.outputs.variant }}
+    steps:
+      - id: ctx
+        # Event values reach the script only through env vars, never through ${{ }} inside `run` (ADR-009).
+        env:
+          EVENT: ${{ github.event_name }}
+          NUMBER: ${{ github.event.issue.number }}
+          IS_PR: ${{ github.event.issue.pull_request && 'true' || 'false' }}
+          COMMENT: ${{ github.event.comment.body }}
+          IN_ISSUE: ${{ inputs.issue }}
+          IN_ROUND: ${{ inputs.round }}
+          IN_FROM: ${{ inputs.from_stage }}
+          IN_PREV: ${{ inputs.prev_run_id }}
+          IN_MODE: ${{ inputs.mode }}
+          IN_PR: ${{ inputs.pr }}
+          IN_VARIANT: ${{ inputs.variant }}
+        run: |
+          set -euo pipefail
+          num() { [[ "$1" =~ ^[0-9]*$ ]] || { echo "not a number: $1"; exit 1; }; echo "$1"; }
+          mode=full; issue=""; pr=""; round=1; from=requirements; prev=""; variant=main
+          case "$EVENT" in
+            workflow_dispatch)
+              mode="$IN_MODE"; issue=$(num "$IN_ISSUE"); pr=$(num "$IN_PR"); round=$(num "$IN_ROUND")
+              from="$IN_FROM"; prev=$(num "$IN_PREV"); variant="$IN_VARIANT" ;;
+            issues) issue=$(num "$NUMBER") ;;
+            issue_comment)
+              if [ "$IS_PR" = "true" ]; then mode=review; pr=$(num "$NUMBER"); else issue=$(num "$NUMBER"); fi
+              v=$(printf '%s' "$COMMENT" | head -1 | grep -oE 'variant=[a-z0-9_]+' | cut -d= -f2 || true)
+              case "$v" in main|e1_friendly_reviewer|e2_implementer_writes_tests) variant="$v" ;; esac ;;
+          esac
+          case "$from" in requirements|design|implementation) ;; *) echo "bad from_stage"; exit 1 ;; esac
+          {
+            echo "mode=$mode"; echo "issue=$issue"; echo "pr=$pr"; echo "round=$round"
+            echo "from_stage=$from"; echo "prev_run_id=$prev"; echo "variant=$variant"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # ------------------------------------------------------------------ stages 1-4 (agents, no GitHub token)
+  build:
+    needs: gate
+    if: needs.gate.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: read
+      actions: read            # download the previous round's artifacts
+    outputs:
+      status: ${{ steps.build.outputs.status }}
+      base_sha: ${{ steps.prep.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false   # agents never see a GitHub credential
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install project and Claude Code
+        run: |
+          python -m pip install -q -e '.[testing]'
+          npm install -g --silent "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          claude --version
+      - name: Fetch issue (untrusted) and previous round
+        id: prep
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.gate.outputs.issue }}
+          PREV: ${{ needs.gate.outputs.prev_run_id }}
+        run: |
+          set -euo pipefail
+          gh issue view "$ISSUE" --json number,title,body,author,labels > "$RUNNER_TEMP/issue.json"
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          start=""
+          if git ls-remote --exit-code --heads origin "autose/issue-$ISSUE" >/dev/null; then
+            git fetch -q origin "autose/issue-$ISSUE"; start=$(git rev-parse FETCH_HEAD)
+          fi
+          echo "start_sha=$start" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/prev"
+          if [ -n "$PREV" ]; then
+            gh run download "$PREV" -n "autose-build-$ISSUE" -D "$RUNNER_TEMP/prev"
+            gh run download "$PREV" -n "autose-review-$ISSUE" -D "$RUNNER_TEMP/prev" || true
+          fi
+      - name: Stages 1-4 (requirements, design, implementation, testing)
+        id: build
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ISSUE: ${{ needs.gate.outputs.issue }}
+          ROUND: ${{ needs.gate.outputs.round }}
+          FROM: ${{ needs.gate.outputs.from_stage }}
+          VARIANT: ${{ needs.gate.outputs.variant }}
+          PREV: ${{ needs.gate.outputs.prev_run_id }}
+          BASE: ${{ steps.prep.outputs.base_sha }}
+          START: ${{ steps.prep.outputs.start_sha }}
+        run: |
+          set -uo pipefail
+          prev_dir=""; [ -n "$PREV" ] && prev_dir="$RUNNER_TEMP/prev"
+          python .github/autose/orchestrator.py build --issue "$ISSUE" --issue-json "$RUNNER_TEMP/issue.json" \
+            --round "$ROUND" --from-stage "$FROM" --variant "$VARIANT" --base-sha "$BASE" --start-sha "$START" \
+            --prev-dir "$prev_dir" --out "$RUNNER_TEMP/out" --work "$RUNNER_TEMP/work" --repo "$GITHUB_WORKSPACE"
+          echo "status=$(python -c 'import json,sys;print(json.load(open(sys.argv[1]))["status"])' "$RUNNER_TEMP/out/state.json" 2>/dev/null || echo crashed)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: autose-build-${{ needs.gate.outputs.issue }}
+          path: ${{ runner.temp }}/out/
+          overwrite: true
+          retention-days: 30
+
+  # ------------------------------------------------------------------ stage 5 (deterministic, no agent)
+  release:
+    needs: [gate, build]
+    if: needs.build.outputs.status == 'passed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write          # push autose/* branch
+      pull-requests: write     # open / update the PR
+      actions: write           # dispatch ci.yml (GITHUB_TOKEN pushes do not trigger workflows)
+      issues: read
+    outputs:
+      ok: ${{ steps.rel.outputs.ok }}
+      pr: ${{ steps.rel.outputs.pr }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install -q pyyaml
+      - uses: actions/download-artifact@v8
+        with:
+          name: autose-build-${{ needs.gate.outputs.issue }}
+          path: ${{ runner.temp }}/art
+      - name: Push branch, open PR, run CI
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.gate.outputs.issue }}
+          ROUND: ${{ needs.gate.outputs.round }}
+          BASE: ${{ needs.build.outputs.base_sha }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh issue view "$ISSUE" --json number,title,body,author > "$RUNNER_TEMP/issue.json"
+          cp -r .github/autose "$RUNNER_TEMP/autose"   # run the trusted copy; the checkout changes below
+          python "$RUNNER_TEMP/autose/orchestrator.py" release --art "$RUNNER_TEMP/art" --out "$RUNNER_TEMP/rel" \
+            --issue "$ISSUE" --issue-json "$RUNNER_TEMP/issue.json" --round "$ROUND" --base-sha "$BASE" \
+            --base-branch "$BASE_BRANCH" --run-url "$RUN_URL"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: autose-release-${{ needs.gate.outputs.issue }}
+          path: ${{ runner.temp }}/rel/
+          overwrite: true
+          retention-days: 30
+
+  # ------------------------------------------------------------------ stage 6 (independent reviewer)
+  review:
+    needs: [gate, release]
+    if: >-
+      always() && needs.gate.result == 'success'
+      && (needs.gate.outputs.mode == 'review' || needs.release.outputs.ok == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read           # read-only: the reviewer can never push (ADR-008)
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7      # trusted orchestrator code from the default branch
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+      - name: Resolve PR and issue (untrusted text saved to files)
+        id: ctx
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.gate.outputs.mode == 'review' && needs.gate.outputs.pr || needs.release.outputs.pr }}
+          ISSUE: ${{ needs.gate.outputs.issue }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/in"
+          gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json number,title,body,headRefOid,baseRefName > "$RUNNER_TEMP/in/pr.json"
+          python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["body"])' "$RUNNER_TEMP/in/pr.json" > "$RUNNER_TEMP/in/pr_body.md"
+          if [ -z "$ISSUE" ]; then
+            ISSUE=$(grep -oiE '(closes|fixes|resolves) #[0-9]+' "$RUNNER_TEMP/in/pr_body.md" | head -1 | grep -oE '[0-9]+' || true)
+          fi
+          [ -n "$ISSUE" ] || { echo "PR body links no issue"; exit 1; }
+          gh issue view "$ISSUE" -R "$GITHUB_REPOSITORY" --json number,title,body,author > "$RUNNER_TEMP/in/issue.json"
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          echo "issue=$ISSUE" >> "$GITHUB_OUTPUT"
+          echo "head=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["headRefOid"])' "$RUNNER_TEMP/in/pr.json")" >> "$GITHUB_OUTPUT"
+          echo "base=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["baseRefName"])' "$RUNNER_TEMP/in/pr.json")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7      # the PR exactly at its head commit, fresh, no credentials
+        with:
+          ref: ${{ steps.ctx.outputs.head }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Diff and environment
+        env:
+          BASE: ${{ steps.ctx.outputs.base }}
+        run: |
+          set -euo pipefail
+          git -C pr diff "origin/$BASE...HEAD" > "$RUNNER_TEMP/in/diff.patch"
+          wc -l "$RUNNER_TEMP/in/diff.patch"
+          python -m pip install -q -e 'pr[testing]'
+          npm install -g --silent "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      - name: Independent review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          VARIANT: ${{ needs.gate.outputs.variant }}
+        run: |
+          python trusted/.github/autose/orchestrator.py review --issue-json "$RUNNER_TEMP/in/issue.json" \
+            --pr-dir pr --diff "$RUNNER_TEMP/in/diff.patch" --out "$RUNNER_TEMP/review" --variant "$VARIANT" \
+            --pr-body "$RUNNER_TEMP/in/pr_body.md"
+          cp "$RUNNER_TEMP/in/diff.patch" "$RUNNER_TEMP/review/reviewed_diff.patch"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: autose-review-${{ needs.gate.outputs.mode == 'review' && format('pr{0}', steps.ctx.outputs.pr) || needs.gate.outputs.issue }}
+          path: ${{ runner.temp }}/review/
+          overwrite: true
+          retention-days: 30
+
+  # ------------------------------------------------------------------ post review, update state, loop back
+  route:
+    needs: [gate, build, release, review]
+    if: always() && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write     # post the review as a PR comment-review
+      issues: write            # state comment / stop reason
+      actions: write           # dispatch the next round
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/autose
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m pip install -q pyyaml
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: autose-build-${{ needs.gate.outputs.issue }}
+          path: ${{ runner.temp }}/build
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: autose-release-${{ needs.gate.outputs.issue }}
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: autose-review-${{ needs.gate.outputs.mode == 'review' && format('pr{0}', needs.gate.outputs.pr) || needs.gate.outputs.issue }}
+          path: ${{ runner.temp }}/review
+      - name: Route
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.gate.outputs.issue }}
+          PR: ${{ needs.gate.outputs.pr }}
+          ROUND: ${{ needs.gate.outputs.round }}
+          FROM: ${{ needs.gate.outputs.from_stage }}
+          MODE: ${{ needs.gate.outputs.mode }}
+          VARIANT: ${{ needs.gate.outputs.variant }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python .github/autose/orchestrator.py route --issue "${ISSUE:-0}" --pr "$PR" --round "$ROUND" \
+            --from-stage "$FROM" --mode "$MODE" --variant "$VARIANT" --run-id "$GITHUB_RUN_ID" --run-url "$RUN_URL" \
+            --default-branch "$DEFAULT_BRANCH" --build-dir "$RUNNER_TEMP/build" --release-dir "$RUNNER_TEMP/release" \
+            --review-dir "$RUNNER_TEMP/review"

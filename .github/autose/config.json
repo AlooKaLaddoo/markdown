@@ -1,0 +1,116 @@
+{
+  "default_branch": "master",
+  "budgets": {
+    "stage_retries": 1,
+    "impl_attempts_per_design": 2,
+    "design_revisions_from_tests": 1,
+    "max_review_sendbacks": 2,
+    "agent_timeout_seconds": 1500
+  },
+  "roles": {
+    "analyst": {
+      "model": "claude-opus-5-5",
+      "effort": "medium",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "allowed": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "max_turns": 40,
+      "budget_usd": 3.0
+    },
+    "judge": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "tools": [],
+      "allowed": [],
+      "max_turns": 3,
+      "budget_usd": 0.2
+    },
+    "implementer": {
+      "model": "claude-opus-5-5",
+      "effort": "medium",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write",
+        "Bash"
+      ],
+      "allowed": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write",
+        "Bash(python -m unittest:*)",
+        "Bash(python -m compileall:*)",
+        "Bash(python -c:*)"
+      ],
+      "max_turns": 80,
+      "budget_usd": 6.0
+    },
+    "tester": {
+      "model": "claude-opus-5-5",
+      "effort": "medium",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write",
+        "Bash"
+      ],
+      "allowed": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Edit",
+        "Write",
+        "Bash(python -m unittest:*)",
+        "Bash(python -c:*)"
+      ],
+      "max_turns": 50,
+      "budget_usd": 4.0
+    },
+    "reviewer": {
+      "model": "claude-sonnet-5-5",
+      "effort": "high",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write",
+        "Bash"
+      ],
+      "allowed": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write",
+        "Bash(python:*)",
+        "Bash(python3:*)",
+        "Bash(git diff:*)"
+      ],
+      "max_turns": 60,
+      "budget_usd": 3.0
+    }
+  },
+  "variants": {
+    "main": {},
+    "e1_friendly_reviewer": {
+      "reviewer_model": "claude-opus-5-5",
+      "reviewer_prompt": "reviewer_friendly.md",
+      "reviewer_sees_pr_description": true
+    },
+    "e2_implementer_writes_tests": {
+      "skip_tester": true
+    }
+  }
+}
