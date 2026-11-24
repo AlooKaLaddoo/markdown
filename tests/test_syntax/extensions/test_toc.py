@@ -1217,6 +1217,48 @@ class TestTOC(TestCase):
             extensions=[TocExtension(permalink=True, permalink_title="パーマリンク", slugify=slugify_unicode)]
         )
 
+    def testUnicodeSlugHindiHeading(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertMarkdownRenders(
+            '# नमस्ते दुनिया',
+            '<h1 id="नमस्ते-दुनिया">नमस्ते दुनिया</h1>',
+            extensions=[TocExtension(slugify=slugify_unicode)]
+        )
+
+    def testSlugifyUnicodeCombiningMarks(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertEqual(slugify_unicode('हिन्दी', '-'), 'हिन्दी')
+
+    def testUnicodeSlugCyrillicHeading(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertMarkdownRenders(
+            '# Привет мир',
+            '<h1 id="привет-мир">Привет мир</h1>',
+            extensions=[TocExtension(slugify=slugify_unicode)]
+        )
+
+    def testSlugifyUnicodeStripsPunctuation(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertEqual(slugify_unicode('Unicode ヘッダー!?', '-'), 'unicode-ヘッダー')
+
+    def testDefaultSlugifyUnchanged(self):
+        from markdown.extensions.toc import slugify
+        self.assertEqual(slugify('Théâtre', '-'), 'theatre')
+        self.assertEqual(slugify('Привет мир', '-'), '')
+
+    def testDocsSlugifyUnicodeExample(self):
+        import os
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'docs', 'extensions', 'toc.md'
+        )
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        self.assertIn('TocExtension(slugify=slugify_unicode)', text)
+        self.assertIn('from markdown.extensions.toc import TocExtension, slugify_unicode', text)
+        self.assertIn('# Привет мир', text)
+        self.assertIn('<h1 id="привет-мир">Привет мир</h1>', text)
+        self.assertIn('Default: `markdown.extensions.toc.slugify`', text)
+
     def testPermalinkWithExtendedLatinInID(self):
         self.assertMarkdownRenders(
             '# Théâtre',

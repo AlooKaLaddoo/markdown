@@ -217,7 +217,16 @@ The following options are provided to configure the output:
     The callable must return a string appropriate for use in HTML `id` attributes.
 
     An alternate version of the default callable supporting Unicode strings is also
-    provided as `markdown.extensions.toc.slugify_unicode`.
+    provided as `markdown.extensions.toc.slugify_unicode`. It keeps non-Latin scripts
+    (for example Cyrillic or Devanagari) in the ids rather than dropping them:
+
+    ```pycon
+    >>> import markdown
+    >>> from markdown.extensions.toc import TocExtension, slugify_unicode
+    >>> html = markdown.markdown('# Привет мир', extensions=[TocExtension(slugify=slugify_unicode)])
+    >>> print(html)
+    <h1 id="привет-мир">Привет мир</h1>
+    ```
 
 * **`separator`**:
     Word separator. Character which replaces white space in id. Defaults to "`-`".

@@ -42,12 +42,23 @@ def slugify(value: str, separator: str, unicode: bool = False) -> str:
         # Replace Extended Latin characters with ASCII, i.e. `žlutý` => `zluty`
         value = unicodedata.normalize('NFKD', value)
         value = value.encode('ascii', 'ignore').decode('ascii')
-    value = re.sub(r'[^\w\s-]', '', value).strip().lower()
+        value = re.sub(r'[^\w\s-]', '', value)
+    else:
+        # Keep combining marks (`Mn`, `Mc`), which `\w` does not match, i.e. Devanagari vowel signs.
+        value = ''.join(
+            c for c in value
+            if re.match(r'[\w\s-]', c) or unicodedata.category(c) in ('Mn', 'Mc')
+        )
+    value = value.strip().lower()
     return re.sub(r'[{}\s]+'.format(separator), separator, value)
 
 
 def slugify_unicode(value: str, separator: str) -> str:
-    """ Slugify a string, to make it URL friendly while preserving Unicode characters. """
+    """
+    Slugify a string, to make it URL friendly while preserving Unicode characters.
+
+    Combining marks, such as Indic vowel signs and the virama, are kept.
+    """
     return slugify(value, separator, unicode=True)
 
 
