@@ -1574,3 +1574,67 @@ class testStripTags(TestCase):
             strip_tags('foo &lt; &amp; &lt; bar'),
             'foo &lt; &amp; &lt; bar'
         )
+
+
+class TestTocValuelessId(TestCase):
+    """ Headings with a valueless `{id}` attribute get a generated slug. """
+
+    def test_bare_id(self):
+        self.assertMarkdownRenders(
+            '#d {id}',
+            '<h1 id="d">d</h1>',
+            extensions=['toc', 'attr_list']
+        )
+
+    def test_bare_id_with_marker(self):
+        self.assertMarkdownRenders(
+            '[TOC]\n\n# Header 1 {id}',
+            '<div class="toc">\n'
+            '<ul>\n'
+            '<li><a href="#header-1">Header 1</a></li>\n'
+            '</ul>\n'
+            '</div>\n'
+            '<h1 id="header-1">Header 1</h1>',
+            extensions=['toc', 'attr_list']
+        )
+
+    def test_bare_id_toc_tokens(self):
+        md = Markdown(extensions=['toc', 'attr_list'])
+        md.convert('# Header 1 {id}')
+        self.assertEqual(md.toc_tokens[0]['id'], 'header-1')
+        self.assertEqual(md.toc_tokens[0]['name'], 'Header 1')
+
+    def test_bare_id_unique(self):
+        self.assertMarkdownRenders(
+            '# Title\n\n# Title {id}',
+            '<h1 id="title">Title</h1>\n<h1 id="title_1">Title</h1>',
+            extensions=['toc', 'attr_list']
+        )
+
+    def test_bare_id_permalink(self):
+        html = Markdown(extensions=['attr_list', TocExtension(permalink=True)]).convert('# Header 1 {id}')
+        self.assertIn('<h1 id="header-1">', html)
+        self.assertIn('href="#header-1"', html)
+
+    def test_bare_id_anchorlink(self):
+        self.assertMarkdownRenders(
+            '# Header 1 {id}',
+            '<h1 id="header-1"><a class="toclink" href="#header-1">Header 1</a></h1>',
+            extensions=['attr_list', TocExtension(anchorlink=True)]
+        )
+
+    def test_explicit_id_kept(self):
+        for src in ('# Title {#my-id}', '# Title {id=my-id}'):
+            with self.subTest(src=src):
+                self.assertMarkdownRenders(
+                    src,
+                    '<h1 id="my-id">Title</h1>',
+                    extensions=['toc', 'attr_list']
+                )
+
+    def test_other_valueless_attr_kept(self):
+        self.assertMarkdownRenders(
+            '# Heading {download}',
+            '<h1 download id="heading">Heading</h1>',
+            extensions=['toc', 'attr_list']
+        )
