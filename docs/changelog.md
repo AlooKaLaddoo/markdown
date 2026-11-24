@@ -14,6 +14,11 @@ See the [Contributing Guide](contributing.md) for details.
 
 ## [Unreleased]
 
+### Changed
+
+* The `wikilinks` extension supports custom link text with
+  `[[Page Name|link text]]`.
+
 ### Fixed
 
 * Support automatic links with URL schemes other than HTTP and FTP, such as
