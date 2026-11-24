@@ -416,16 +416,18 @@ def validate_verdict(v: dict | None) -> dict:
         return {"final": "inconclusive", "route": "none", "why": "reviewer returned no valid verdict"}
     blocking = [f for f in v["findings"] if f["severity"] in ("blocker", "major") and f["evidence"].strip()]
     failed_items = [k for k, ok in v["checklist"].items() if not ok]
-    if v["verdict"] == "approve":
-        if failed_items:
-            return {"final": "request_changes", "route": v["route"] if v["route"] != "none" else "implementation",
-                    "why": f"approve rejected by orchestrator: checklist items false: {failed_items}"}
-        return {"final": "approve", "route": "none", "why": "reviewer approved and every checklist item is true"}
-    if not blocking:
-        return {"final": "approve", "route": "none",
-                "why": "request_changes without any blocker/major finding with evidence; treated as approve with comments"}
-    route = v["route"] if v["route"] != "none" else "implementation"
-    return {"final": "request_changes", "route": route, "why": f"{len(blocking)} blocker/major finding(s) with evidence"}
+    if blocking:
+        route = v["route"] if v["route"] != "none" else "implementation"
+        return {"final": "request_changes", "route": route,
+                "why": f"{len(blocking)} blocker/major finding(s) with evidence"}
+    if not failed_items:
+        why = "every checklist item is true and there is no blocker/major finding"
+        if v["verdict"] != "approve":
+            why += " (the reviewer asked for changes, but only with minor findings)"
+        return {"final": "approve", "route": "none", "why": why}
+    # No evidence-backed problem, but the reviewer could not confirm the change: never turn that into an approval.
+    return {"final": "inconclusive", "route": "none",
+            "why": f"no blocker/major finding with evidence, but checklist items are false: {failed_items}"}
 
 
 def render_review(v: dict | None, decision: dict, res: AgentResult, meta: dict) -> str:
