@@ -92,6 +92,9 @@ def build_inlinepatterns(md: Markdown, **kwargs: Any) -> util.Registry[InlinePro
     inlinePatterns.register(HtmlInlineProcessor(ENTITY_RE, md), 'entity', 80)
     inlinePatterns.register(DelimiterProcessor('*', 'strong,em', md), 'em_strong', 60)
     md.delimiters.add('_', 'strong,em', smart=True)
+    # GitHub-style ~~strikethrough~~
+    inlinePatterns.register(SimpleTagInlineProcessor(r'(~{2})(.+?)~{2}', 'del'), 'strikethrough', 55)
+
     return inlinePatterns
 
 
