@@ -252,6 +252,126 @@ Some text with a [[WikiLink]]."""
             '<p><a class="wikilink" href="/bar/">foo</a></p>'
         )
 
+    def testCustomLinkText(self):
+        """ Test `[[Page Name|link text]]`. """
+        self.assertEqual(
+            self.md.convert('See [[Installation Guide|see the install docs]].'),
+            '<p>See <a class="wikilink" href="/Installation_Guide/">see the install docs</a>.</p>'
+        )
+        self.assertEqual(
+            self.md.convert('[[ Installation Guide | see the install docs ]]'),
+            '<p><a class="wikilink" href="/Installation_Guide/">see the install docs</a></p>'
+        )
+        self.assertEqual(self.md.convert('[[a|b|c]]'), '<p>[[a|b|c]]</p>')
+        self.assertEqual(
+            self.md.convert('[[Page|a & b]]'),
+            '<p><a class="wikilink" href="/Page/">a &amp; b</a></p>'
+        )
+        self.assertEqual(
+            self.md.convert('[[foo|double  spaces]]'),
+            '<p><a class="wikilink" href="/foo/">double  spaces</a></p>'
+        )
+        self.assertEqual(
+            self.md.convert('[[foo|Q&A <docs>]]'),
+            '<p><a class="wikilink" href="/foo/">Q&amp;A &lt;docs&gt;</a></p>'
+        )
+
+    def testCustomLinkTextEntityAndBrackets(self):
+        """ Test entities are kept and brackets are not allowed in link text. """
+        self.assertEqual(
+            self.md.convert('[[foo|&copy; x]]'),
+            '<p><a class="wikilink" href="/foo/">&copy; x</a></p>'
+        )
+        self.assertNotIn('<a class="wikilink"', self.md.convert('[[foo|a]b]]'))
+        self.assertNotIn('<a class="wikilink"', self.md.convert('[[foo|a[b]]'))
+
+    def testCustomLinkTextEmpty(self):
+        """ Test empty link text falls back to the page name. """
+        self.assertEqual(
+            self.md.convert('[[Installation Guide|]]'),
+            '<p><a class="wikilink" href="/Installation_Guide/">Installation Guide</a></p>'
+        )
+        self.assertEqual(
+            self.md.convert('[[ Installation Guide |   ]]'),
+            '<p><a class="wikilink" href="/Installation_Guide/">Installation Guide</a></p>'
+        )
+        self.assertEqual(self.md.convert('foo [[ |text]] bar'), '<p>foo  bar</p>')
+
+    def testCustomLinkTextSettings(self):
+        """ Test custom link text with settings, meta-data and `build_url`. """
+        from markdown.extensions.wikilinks import WikiLinkExtension
+
+        md = markdown.Markdown(extensions=[
+            WikiLinkExtension(base_url='/wiki/', end_url='.html', html_class='foo')
+        ])
+        self.assertEqual(
+            md.convert('[[WikiLink|the text]]'),
+            '<p><a class="foo" href="/wiki/WikiLink.html">the text</a></p>'
+        )
+
+        labels = []
+
+        def my_url_builder(label, base, end):
+            labels.append(label)
+            return '/x/' + label + '/'
+
+        md = markdown.Markdown(extensions=[WikiLinkExtension(build_url=my_url_builder)])
+        self.assertEqual(
+            md.convert('[[foo|bar]]'),
+            '<p><a class="wikilink" href="/x/foo/">bar</a></p>'
+        )
+        self.assertEqual(labels, ['foo'])
+
+        text = """wiki_base_url: http://example.com/
+wiki_end_url:   .html
+wiki_html_class:
+
+Some text with a [[WikiLink|custom]]."""
+        md = markdown.Markdown(extensions=['meta', 'wikilinks'])
+        self.assertEqual(
+            md.convert(text),
+            '<p>Some text with a '
+            '<a href="http://example.com/WikiLink.html">custom</a>.</p>'
+        )
+
+        # Exact spec cases.
+        self.assertEqual(
+            markdown.markdown('Some text with a [[WikiLink|a link]].', extensions=[
+                WikiLinkExtension(base_url='/wiki/', end_url='.html', html_class='foo')
+            ]),
+            '<p>Some text with a <a class="foo" href="/wiki/WikiLink.html">a link</a>.</p>'
+        )
+
+        md = markdown.Markdown(
+            extensions=['wikilinks'],
+            extension_configs={
+                'wikilinks': {'base_url': 'http://example.com/', 'end_url': '.html', 'html_class': ''}
+            }
+        )
+        self.assertEqual(
+            md.convert('[[WikiLink|a link]]'),
+            '<p><a href="http://example.com/WikiLink.html">a link</a></p>'
+        )
+
+        md = markdown.Markdown(extensions=['meta', 'wikilinks'])
+        self.assertEqual(
+            md.convert(text.replace('[[WikiLink|custom]]', '[[WikiLink|a link]]')),
+            '<p>Some text with a <a href="http://example.com/WikiLink.html">a link</a>.</p>'
+        )
+
+        calls = []
+
+        def recording_builder(label, base, end):
+            calls.append((label, base, end))
+            return '/bar/'
+
+        md = markdown.Markdown(extensions=[WikiLinkExtension(build_url=recording_builder)])
+        self.assertEqual(
+            md.convert('[[ foo | some text ]]'),
+            '<p><a class="wikilink" href="/bar/">some text</a></p>'
+        )
+        self.assertEqual(calls, [('foo', '/', '/')])
+
 
 class TestAdmonition(unittest.TestCase):
     """ Test Admonition Extension. """
