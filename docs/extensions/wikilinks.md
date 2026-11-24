@@ -53,6 +53,21 @@ extensions: [wikilinks]
 [[Wiki Link]]
 ```
 
+To display different text for a link, add it after a pipe (`|`):
+``[[Page Name|link text]]``. The URL and class are built from the page name
+only, exactly as for ``[[Page Name]]``, and the text after the pipe is used as
+the link text. Whitespace around the page name and the link text is ignored. If
+the link text is empty, the page name is used instead. The link text may
+contain any characters except `[`, `]`, `|` and newlines; a link with more than
+one pipe is not recognized and is left as-is.
+
+``` md-render
+---
+extensions: [wikilinks]
+---
+[[Wiki Link|some other text]]
+```
+
 ## Usage
 
 See [Extensions](index.md) for general extension usage. Use `wikilinks` as the
