@@ -216,6 +216,10 @@ The following options are provided to configure the output:
 
     The callable must return a string appropriate for use in HTML `id` attributes.
 
+    The default callable only keeps ASCII characters. Headers written entirely in a
+    non-Latin script (for example Russian or Hindi) therefore get an empty slug, and
+    so the ids `_1`, `_2`, etc. For such documents, use `slugify_unicode` instead.
+
     An alternate version of the default callable supporting Unicode strings is also
     provided as `markdown.extensions.toc.slugify_unicode`. It keeps non-Latin scripts
     (for example Cyrillic or Devanagari) in the ids rather than dropping them:

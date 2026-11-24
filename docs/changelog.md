@@ -17,8 +17,8 @@ See the [Contributing Guide](contributing.md) for details.
 ### Fixed
 
 * `slugify_unicode` in the `toc` extension now keeps combining marks (for example
-  Devanagari vowel signs), so ids made from Hindi and other Indic headings stay
-  readable.
+  Devanagari vowel signs) which follow a kept character, so ids made from Hindi
+  and other Indic headings stay readable. Variation selectors are still removed.
 * Support automatic links with URL schemes other than HTTP and FTP, such as
   `<ssh://example.org>` (#1244).
 * Fix quadratic-time id generation in the `toc` extension when many headers

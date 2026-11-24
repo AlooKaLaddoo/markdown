@@ -1241,6 +1241,29 @@ class TestTOC(TestCase):
         from markdown.extensions.toc import slugify_unicode
         self.assertEqual(slugify_unicode('Unicode ヘッダー!?', '-'), 'unicode-ヘッダー')
 
+    def testSlugifyUnicodeDropsMarksOfRemovedChars(self):
+        from markdown.extensions.toc import slugify_unicode
+        heart = chr(0x2764) + chr(0xFE0F)  # Heart emoji with emoji variation selector (`Mn`).
+        self.assertEqual(slugify_unicode(heart + ' Love', '-'), 'love')
+        self.assertEqual(slugify_unicode(heart, '-'), '')
+        # A combining mark after white space has no base character and is removed.
+        self.assertEqual(slugify_unicode('a ' + chr(0x0301) + 'b', '-'), 'a-b')
+
+    def testSlugifyUnicodeDropsVariationSelectors(self):
+        from markdown.extensions.toc import slugify_unicode
+        keycap_one = '1' + chr(0xFE0F) + chr(0x20E3)
+        self.assertEqual(slugify_unicode(keycap_one + ' x', '-'), '1-x')
+        self.assertEqual(slugify_unicode('a' + chr(0xE0100) + 'b', '-'), 'ab')
+
+    def testUnicodeSlugEmojiHeading(self):
+        from markdown.extensions.toc import slugify_unicode
+        heart = chr(0x2764) + chr(0xFE0F)
+        self.assertMarkdownRenders(
+            f'# {heart} Love\n# {heart}',
+            f'<h1 id="love">{heart} Love</h1>\n<h1 id="_1">{heart}</h1>',
+            extensions=[TocExtension(slugify=slugify_unicode)]
+        )
+
     def testDefaultSlugifyUnchanged(self):
         from markdown.extensions.toc import slugify
         self.assertEqual(slugify('Théâtre', '-'), 'theatre')
