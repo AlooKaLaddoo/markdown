@@ -1220,9 +1220,9 @@ class TestTOC(TestCase):
     def testPermalinkWithExtendedLatinInID(self):
         self.assertMarkdownRenders(
             '# Théâtre',
-            '<h1 id="theatre">'                                                            # noqa
+            '<h1 id="théâtre">'                                                            # noqa
                 'Théâtre'                                                                  # noqa
-                '<a class="headerlink" href="#theatre" title="Permanent link">&para;</a>'  # noqa
+                '<a class="headerlink" href="#théâtre" title="Permanent link">&para;</a>'  # noqa
             '</h1>',                                                                       # noqa
             extensions=[TocExtension(permalink=True)]
         )
@@ -1574,3 +1574,9 @@ class testStripTags(TestCase):
             strip_tags('foo &lt; &amp; &lt; bar'),
             'foo &lt; &amp; &lt; bar'
         )
+
+
+class TestTOCNonLatin(TestCase):
+
+    def test_hindi_heading_id(self):
+        self.assertMarkdownRenders('# नमस्ते', '<h1 id="नमसत">नमस्ते</h1>', extensions=['toc'])
