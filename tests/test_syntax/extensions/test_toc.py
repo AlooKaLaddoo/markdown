@@ -1217,6 +1217,71 @@ class TestTOC(TestCase):
             extensions=[TocExtension(permalink=True, permalink_title="パーマリンク", slugify=slugify_unicode)]
         )
 
+    def testUnicodeSlugHindiHeading(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertMarkdownRenders(
+            '# नमस्ते दुनिया',
+            '<h1 id="नमस्ते-दुनिया">नमस्ते दुनिया</h1>',
+            extensions=[TocExtension(slugify=slugify_unicode)]
+        )
+
+    def testSlugifyUnicodeCombiningMarks(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertEqual(slugify_unicode('हिन्दी', '-'), 'हिन्दी')
+
+    def testUnicodeSlugCyrillicHeading(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertMarkdownRenders(
+            '# Привет мир',
+            '<h1 id="привет-мир">Привет мир</h1>',
+            extensions=[TocExtension(slugify=slugify_unicode)]
+        )
+
+    def testSlugifyUnicodeStripsPunctuation(self):
+        from markdown.extensions.toc import slugify_unicode
+        self.assertEqual(slugify_unicode('Unicode ヘッダー!?', '-'), 'unicode-ヘッダー')
+
+    def testSlugifyUnicodeDropsMarksOfRemovedChars(self):
+        from markdown.extensions.toc import slugify_unicode
+        heart = chr(0x2764) + chr(0xFE0F)  # Heart emoji with emoji variation selector (`Mn`).
+        self.assertEqual(slugify_unicode(heart + ' Love', '-'), 'love')
+        self.assertEqual(slugify_unicode(heart, '-'), '')
+        # A combining mark after white space has no base character and is removed.
+        self.assertEqual(slugify_unicode('a ' + chr(0x0301) + 'b', '-'), 'a-b')
+
+    def testSlugifyUnicodeDropsVariationSelectors(self):
+        from markdown.extensions.toc import slugify_unicode
+        keycap_one = '1' + chr(0xFE0F) + chr(0x20E3)
+        self.assertEqual(slugify_unicode(keycap_one + ' x', '-'), '1-x')
+        self.assertEqual(slugify_unicode('a' + chr(0xE0100) + 'b', '-'), 'ab')
+
+    def testUnicodeSlugEmojiHeading(self):
+        from markdown.extensions.toc import slugify_unicode
+        heart = chr(0x2764) + chr(0xFE0F)
+        self.assertMarkdownRenders(
+            f'# {heart} Love\n# {heart}',
+            f'<h1 id="love">{heart} Love</h1>\n<h1 id="_1">{heart}</h1>',
+            extensions=[TocExtension(slugify=slugify_unicode)]
+        )
+
+    def testDefaultSlugifyUnchanged(self):
+        from markdown.extensions.toc import slugify
+        self.assertEqual(slugify('Théâtre', '-'), 'theatre')
+        self.assertEqual(slugify('Привет мир', '-'), '')
+
+    def testDocsSlugifyUnicodeExample(self):
+        import os
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'docs', 'extensions', 'toc.md'
+        )
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        self.assertIn('TocExtension(slugify=slugify_unicode)', text)
+        self.assertIn('from markdown.extensions.toc import TocExtension, slugify_unicode', text)
+        self.assertIn('# Привет мир', text)
+        self.assertIn('<h1 id="привет-мир">Привет мир</h1>', text)
+        self.assertIn('Default: `markdown.extensions.toc.slugify`', text)
+
     def testPermalinkWithExtendedLatinInID(self):
         self.assertMarkdownRenders(
             '# Théâtre',

@@ -36,18 +36,53 @@ if TYPE_CHECKING:  # pragma: no cover
     from markdown import Markdown
 
 
+_SLUG_CHAR_RE = re.compile(r'[\w\s-]')
+# Variation selectors (`U+FE00`-`U+FE0F`, `U+E0100`-`U+E01EF`) only select a glyph variant,
+# i.e. the emoji presentation of a heart, and are never kept.
+_VARIATION_SELECTOR_RE = re.compile(r'[\ufe00-\ufe0f\U000e0100-\U000e01ef]')
+
+
+def _strip_unicode(value: str) -> str:
+    """
+    Remove characters which are not word characters, white space or hyphens.
+
+    Combining marks (`Mn`, `Mc`), which `\\w` does not match (i.e. Devanagari vowel signs and
+    the virama), are kept when they follow a kept word character (or another such mark), so
+    that marks attached to removed characters are removed with them.
+    """
+    chars = []
+    after_word = False
+    for c in value:
+        if unicodedata.category(c) in ('Mn', 'Mc'):
+            if after_word and not _VARIATION_SELECTOR_RE.match(c):
+                chars.append(c)
+        elif _SLUG_CHAR_RE.match(c):
+            chars.append(c)
+            after_word = not (c.isspace() or c == '-')
+        else:
+            after_word = False
+    return ''.join(chars)
+
+
 def slugify(value: str, separator: str, unicode: bool = False) -> str:
     """ Slugify a string, to make it URL friendly. """
     if not unicode:
         # Replace Extended Latin characters with ASCII, i.e. `žlutý` => `zluty`
         value = unicodedata.normalize('NFKD', value)
         value = value.encode('ascii', 'ignore').decode('ascii')
-    value = re.sub(r'[^\w\s-]', '', value).strip().lower()
+        value = re.sub(r'[^\w\s-]', '', value)
+    else:
+        value = _strip_unicode(value)
+    value = value.strip().lower()
     return re.sub(r'[{}\s]+'.format(separator), separator, value)
 
 
 def slugify_unicode(value: str, separator: str) -> str:
-    """ Slugify a string, to make it URL friendly while preserving Unicode characters. """
+    """
+    Slugify a string, to make it URL friendly while preserving Unicode characters.
+
+    Combining marks, such as Indic vowel signs and the virama, are kept.
+    """
     return slugify(value, separator, unicode=True)
 
 
