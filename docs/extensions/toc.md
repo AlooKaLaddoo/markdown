@@ -217,7 +217,10 @@ The following options are provided to configure the output:
     The callable must return a string appropriate for use in HTML `id` attributes.
 
     An alternate version of the default callable supporting Unicode strings is also
-    provided as `markdown.extensions.toc.slugify_unicode`.
+    provided as `markdown.extensions.toc.slugify_unicode`. The default callable
+    produces ASCII-only ids, but if a heading contains no ASCII word characters
+    (for example, a heading written entirely in Cyrillic or Devanagari), it falls
+    back to the Unicode slug, so such headings still get readable ids.
 
 * **`separator`**:
     Word separator. Character which replaces white space in id. Defaults to "`-`".

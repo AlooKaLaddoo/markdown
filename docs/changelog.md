@@ -39,6 +39,11 @@ See the [Contributing Guide](contributing.md) for details.
   provided, rather than rendering them as `key="key"`, so the same source
   renders consistently under both the `html` and `xhtml` output formats
   (#1501).
+* The default `slugify` function of the `toc` extension now falls back to a
+  Unicode slug when the ASCII slug would be empty, so headings written entirely
+  in non-Latin scripts (e.g. Cyrillic or Devanagari) get readable ids instead
+  of `_1`, `_2`, etc. Unicode slugs also keep combining marks (such as
+  Devanagari vowel signs), so words are no longer altered.
 
 ## [3.11.2] - 2026-10-19
 
