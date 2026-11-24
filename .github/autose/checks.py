@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -139,8 +140,16 @@ def check_design(design: str, repo: Path) -> Check:
 
 # ---------- stage 3: build ----------
 
+# The checks run agent-written code (pip install -e ., the test suite) outside the agent sandbox, so they must not
+# inherit credentials from the build step's environment.
+SECRET_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "GH_TOKEN", "GITHUB_TOKEN", "ACTIONS_RUNTIME_TOKEN",
+              "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_RESULTS_URL")
+
+
 def run(cmd: list[str] | str, cwd: Path, timeout: int = 900) -> tuple[int, str]:
-    p = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, timeout=timeout, shell=isinstance(cmd, str))
+    env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV}
+    p = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, timeout=timeout, shell=isinstance(cmd, str),
+                       env=env)
     return p.returncode, (p.stdout + p.stderr)
 
 
