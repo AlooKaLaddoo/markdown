@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from . import Extension
 from ..inlinepatterns import InlineProcessor
+from .. import util
 import xml.etree.ElementTree as etree
 import re
 from typing import Any
@@ -61,8 +62,8 @@ class WikiLinkExtension(Extension):
 
         # append to end of inline patterns
         # Group 1 is the page name; optional group 2 is the link text after the
-        # first `|` (it may not contain `]]` or a newline).
-        WIKILINK_RE = r'\[\[([\w0-9_ -]+)(?:\|((?:(?!\]\])[^\n])*))?\]\]'
+        # single `|` (it may not contain `[`, `]`, `|` or a newline).
+        WIKILINK_RE = r'\[\[([\w0-9_ -]+)(?:\|([^\[\]\|\n]*))?\]\]'
         wikilinkPattern = WikiLinksInlineProcessor(WIKILINK_RE, self.getConfigs())
         wikilinkPattern.md = md
         md.inlinePatterns.register(wikilinkPattern, 'wikilink', 75)
@@ -80,7 +81,7 @@ class WikiLinksInlineProcessor(InlineProcessor):
             base_url, end_url, html_class = self._getMeta()
             label = m.group(1).strip()
             url = self.config['build_url'](label, base_url, end_url)
-            text = (m.group(2) or '').strip()
+            text = self._restore_raw_html(m.group(2) or '').strip()
             a = etree.Element('a')
             a.text = text or label
             a.set('href', url)
@@ -89,6 +90,43 @@ class WikiLinksInlineProcessor(InlineProcessor):
         else:
             a = ''
         return a, m.start(0), m.end(0)
+
+    def _restore_raw_html(self, text: str) -> str:
+        """
+        Replace stashed raw inline HTML (tags, comments, etc.) in the link text
+        with its source, so that it is escaped as ordinary text. Entities and
+        any other placeholders are left untouched.
+        """
+        def raw_html(placeholder: str) -> str | None:
+            m = util.HTML_PLACEHOLDER_RE.fullmatch(placeholder)
+            if m is None:
+                return None
+            try:
+                raw = self.md.htmlStash.rawHtmlBlocks[int(m.group(1))]
+            except (IndexError, ValueError):
+                return None
+            if isinstance(raw, str) and raw.startswith('<'):
+                return raw
+            return None
+
+        def repl_html(m: re.Match[str]) -> str:
+            raw = raw_html(m.group(0))
+            return m.group(0) if raw is None else raw
+
+        def repl_inline(m: re.Match[str]) -> str:
+            # The `html` pattern's placeholder is itself stashed as an inline node.
+            try:
+                node = self.md.treeprocessors['inline'].stashed_nodes.get(m.group(1))
+            except (KeyError, AttributeError):  # pragma: no cover
+                return m.group(0)
+            if isinstance(node, str):
+                raw = raw_html(node)
+                if raw is not None:
+                    return raw
+            return m.group(0)
+
+        text = util.INLINE_PLACEHOLDER_RE.sub(repl_inline, text)
+        return util.HTML_PLACEHOLDER_RE.sub(repl_html, text)
 
     def _getMeta(self) -> tuple[str, str, str]:
         """ Return meta data or `config` data. """
