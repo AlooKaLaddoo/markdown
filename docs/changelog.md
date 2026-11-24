@@ -14,6 +14,11 @@ See the [Contributing Guide](contributing.md) for details.
 
 ## [Unreleased]
 
+### Added
+
+* Add the opt-in `strikethrough` extension, which renders `~~text~~` as
+  `<del>text</del>` like GitHub does (#4).
+
 ### Fixed
 
 * Support automatic links with URL schemes other than HTTP and FTP, such as
