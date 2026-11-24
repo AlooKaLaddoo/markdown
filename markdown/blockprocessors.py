@@ -176,7 +176,8 @@ class ListIndentProcessor(BlockProcessor):
             not self.parser.state.isstate('detabbed') and \
             (parent.tag in self.ITEM_TYPES or
                 (len(parent) and parent[-1] is not None and
-                    (parent[-1].tag in self.LIST_TYPES)))
+                    (parent[-1].tag in self.LIST_TYPES))) and \
+            not util.nearing_recursion_limit()
 
     def run(self, parent: etree.Element, blocks: list[str]) -> None:
         block = blocks.pop(0)
@@ -354,7 +355,7 @@ class OListProcessor(BlockProcessor):
                                     (self.tab_length, self.tab_length * 2 - 1))
 
     def test(self, parent: etree.Element, block: str) -> bool:
-        return bool(self.RE.match(block))
+        return bool(self.RE.match(block)) and not util.nearing_recursion_limit()
 
     def run(self, parent: etree.Element, blocks: list[str]) -> None:
         # Check for multiple items in one block.
