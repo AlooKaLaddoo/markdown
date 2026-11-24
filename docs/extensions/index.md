@@ -56,6 +56,7 @@ Extension                          | Entry Point    | Dot Notation
 [New Line to Break]                | `nl2br`        | `markdown.extensions.nl2br`
 [Sane Lists]                       | `sane_lists`   | `markdown.extensions.sane_lists`
 [SmartyPants]                      | `smarty`       | `markdown.extensions.smarty`
+[Strikethrough]                    | `strikethrough` | `markdown.extensions.strikethrough`
 [Table of Contents]                | `toc`          | `markdown.extensions.toc`
 [WikiLinks]                        | `wikilinks`    | `markdown.extensions.wikilinks`
 
@@ -75,6 +76,7 @@ Extension                          | Entry Point    | Dot Notation
 [Markdown in HTML]: md_in_html.md
 [Sane Lists]: sane_lists.md
 [SmartyPants]: smarty.md
+[Strikethrough]: strikethrough.md
 [Table of Contents]: toc.md
 [WikiLinks]: wikilinks.md
 
