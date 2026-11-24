@@ -31,6 +31,8 @@ See the [Contributing Guide](contributing.md) for details.
   characters is followed by more text on the same line.
 * Fix quadratic time when a document contains many unclosed HTML comments (`<!--`
   with no matching `-->`).
+* Fix `RecursionError` on deeply nested lists (e.g. `'- ' * 500 + 'x'`). As with
+  blockquotes, list nesting now stops when nearing the recursion limit.
 * Fix regression in `BacktickInlineProcessor` where text could be lost when opening
   and closing backticks did not match (#1668).
 * Escape the language name in the `codehilite` extension's non-Pygments output to
