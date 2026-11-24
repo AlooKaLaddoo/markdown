@@ -81,6 +81,7 @@ nav:
       - Markdown in HTML: extensions/md_in_html.md
       - Sane Lists: extensions/sane_lists.md
       - SmartyPants: extensions/smarty.md
+      - Strikethrough: extensions/strikethrough.md
       - Table of Contents: extensions/toc.md
       - Tables: extensions/tables.md
       - WikiLinks: extensions/wikilinks.md
@@ -116,6 +117,7 @@ nav:
       - <code>markdown.&#8203;extensions.&#8203;nl2br</code>: reference/markdown.extensions.nl2br.md
       - <code>markdown.&#8203;extensions.&#8203;sane_lists</code>: reference/markdown.extensions.sane_lists.md
       - <code>markdown.&#8203;extensions.&#8203;smarty</code>: reference/markdown.extensions.smarty.md
+      - <code>markdown.&#8203;extensions.&#8203;strikethrough</code>: reference/markdown.extensions.strikethrough.md
       - <code>markdown.&#8203;extensions.&#8203;tables</code>: reference/markdown.extensions.tables.md
       - <code>markdown.&#8203;extensions.&#8203;toc</code>: reference/markdown.extensions.toc.md
       - <code>markdown.&#8203;extensions.&#8203;wikilinks</code>: reference/markdown.extensions.wikilinks.md
