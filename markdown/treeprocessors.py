@@ -423,18 +423,24 @@ class PrettifyTreeprocessor(Treeprocessor):
     """ Add line breaks to the html document. """
 
     def _prettifyETree(self, elem: etree.Element) -> None:
-        """ Recursively add line breaks to `ElementTree` children. """
+        """ Add line breaks to `ElementTree` children.
+
+        Walks the tree iteratively, so that very deeply nested documents
+        cannot exhaust the Python stack. Each element only changes its own
+        `text` and `tail`, so the visiting order does not affect the result.
+        """
 
         i = "\n"
-        if self.md.is_block_level(elem.tag) and elem.tag not in ['code', 'pre']:
-            if (not elem.text or not elem.text.strip()) \
-                    and len(elem) and self.md.is_block_level(elem[0].tag):
-                elem.text = i
-            for e in elem:
-                if self.md.is_block_level(e.tag):
-                    self._prettifyETree(e)
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
+        stack = [elem]
+        while stack:
+            elem = stack.pop()
+            if self.md.is_block_level(elem.tag) and elem.tag not in ['code', 'pre']:
+                if (not elem.text or not elem.text.strip()) \
+                        and len(elem) and self.md.is_block_level(elem[0].tag):
+                    elem.text = i
+                stack.extend(e for e in elem if self.md.is_block_level(e.tag))
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
 
     def run(self, root: etree.Element) -> None:
         """ Add line breaks to `Element` object and its children. """

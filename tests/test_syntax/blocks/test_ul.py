@@ -170,6 +170,18 @@ class TestListNestingLimit(TestCase):
         result = self.render('\n\n'.join(' ' * (4 * i) + '1. x' for i in range(300)))
         self.assertTrue(result.startswith('<ol>'))
 
+    def test_progressively_indented_loose_beyond_limit(self):
+        # Loose lists build a deeper tree per parser frame; the tree passes
+        # after parsing must not overflow the stack either.
+        for marker in ('- x', '1. x'):
+            with self.subTest(marker=marker):
+                self.render('\n\n'.join(' ' * (4 * i) + marker for i in range(600)))
+
+    def test_progressively_indented_loose_with_lowered_recursion_limit(self):
+        with recursionlimit(200):
+            result = self.render('\n\n'.join(' ' * (4 * i) + '- x' for i in range(100)))
+        self.assertTrue(result.startswith('<ul>'))
+
     def test_progressively_indented_by_one_space(self):
         self.render('\n'.join(' ' * i + '- x' for i in range(300)))
 
