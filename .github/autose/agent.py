@@ -84,21 +84,29 @@ def run_agent(role: str, prompt: str, cwd: Path, transcript: Path, *, system_fil
         res.error = f"timeout after {CONFIG['budgets']['agent_timeout_seconds']} s"
         stderr = ""
     res.seconds = time.time() - start
-    final = None
+    # A session can emit several result events: a background-task notification can start an extra turn after the
+    # agent has finished (run 45423758931: the implementer finished in 16 turns, then an extra turn hit the plan
+    # limit). Use the first successful result, and add up usage over all result events.
+    results = []
     for line in transcript.read_text().splitlines():
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
         if ev.get("type") == "result":
-            final = ev
-    if final:
-        res.usage = final.get("usage") or {}
-        res.cost_usd = final.get("total_cost_usd") or 0.0
-        res.turns = final.get("num_turns") or 0
+            results.append(ev)
+    if results:
+        good = [r for r in results if r.get("subtype") == "success" and not r.get("is_error")]
+        final = good[0] if good else results[-1]
+        for r in results:
+            for k, v in (r.get("usage") or {}).items():
+                if isinstance(v, (int, float)):
+                    res.usage[k] = res.usage.get(k, 0) + v
+        res.cost_usd = max(r.get("total_cost_usd") or 0.0 for r in results)  # cumulative per session
+        res.turns = sum(r.get("num_turns") or 0 for r in results)
         res.text = final.get("result") or ""
         res.structured = final.get("structured_output")
-        if final.get("subtype") == "success" and not final.get("is_error"):
+        if good:
             res.ok = True
         else:
             res.error = res.error or f"agent stopped: {final.get('subtype')} {str(final.get('result', ''))[:300]}"
