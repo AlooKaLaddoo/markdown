@@ -313,7 +313,8 @@ def build(args):
     # ---- stages 3 + 4 with retries
     writes_tests = bool(var.get("skip_tester"))
     test_path = acceptance_test_path(issue_no)
-    tests_exist_on_branch = (impl / test_path).exists()
+    # Reuse the branch's acceptance tests only when the spec is reused too (a new spec has new AC ids).
+    tests_exist_on_branch = (impl / test_path).exists() and args.from_stage != "requirements"
     ac_chk, on_base, attempts, final = None, None, [], None
     impl_review = review_md if args.from_stage == "implementation" else ""
     feedback, n, revisions = "", 0, 0
