@@ -20,7 +20,8 @@ License: BSD (see LICENSE.md for details).
 """
 
 import unittest
-from markdown.test_tools import TestCase
+import markdown
+from markdown.test_tools import TestCase, recursionlimit
 
 
 class TestUnorderedLists(TestCase):
@@ -134,4 +135,78 @@ class TestUnorderedLists(TestCase):
                 </ul>
                 """
             )
+        )
+
+
+class TestListNestingLimit(TestCase):
+    """ Deeply nested lists must not raise `RecursionError`. """
+
+    def render(self, source):
+        result = markdown.markdown(source)
+        self.assertIsInstance(result, str)
+        return result
+
+    def test_nested_unordered_markers(self):
+        for marker in ('- ', '* ', '+ '):
+            with self.subTest(marker=marker):
+                result = self.render(marker * 500 + 'x')
+                self.assertTrue(result.startswith('<ul>'))
+                self.assertIn('x', result)
+
+    def test_nested_ordered_markers(self):
+        result = self.render('1. ' * 500 + 'x')
+        self.assertTrue(result.startswith('<ol>'))
+        self.assertIn('x', result)
+
+    def test_very_deeply_nested_markers(self):
+        result = self.render('- ' * 5000 + 'x')
+        self.assertIn('x', result)
+
+    def test_progressively_indented_lines(self):
+        result = self.render('\n'.join(' ' * (4 * i) + '- x' for i in range(300)))
+        self.assertTrue(result.startswith('<ul>'))
+
+    def test_progressively_indented_loose_ordered(self):
+        result = self.render('\n\n'.join(' ' * (4 * i) + '1. x' for i in range(300)))
+        self.assertTrue(result.startswith('<ol>'))
+
+    def test_progressively_indented_loose_beyond_limit(self):
+        # Loose lists build a deeper tree per parser frame; the tree passes
+        # after parsing must not overflow the stack either.
+        for marker in ('- x', '1. x'):
+            with self.subTest(marker=marker):
+                self.render('\n\n'.join(' ' * (4 * i) + marker for i in range(600)))
+
+    def test_progressively_indented_loose_with_lowered_recursion_limit(self):
+        with recursionlimit(200):
+            result = self.render('\n\n'.join(' ' * (4 * i) + '- x' for i in range(100)))
+        self.assertTrue(result.startswith('<ul>'))
+
+    def test_progressively_indented_by_one_space(self):
+        self.render('\n'.join(' ' * i + '- x' for i in range(300)))
+
+    def test_nesting_limit_with_lowered_recursion_limit(self):
+        with recursionlimit(150):
+            result = self.render('- ' * 50 + 'x')
+        self.assertTrue(result.startswith('<ul>'))
+        self.assertIn('x', result)
+
+    def test_shallow_tight_nesting_unchanged(self):
+        self.assertMarkdownRenders(
+            '* Tab\n    * Tab\n        * Tab',
+            '<ul>\n<li>Tab<ul>\n<li>Tab<ul>\n<li>Tab</li>\n</ul>\n</li>\n</ul>\n</li>\n</ul>'
+        )
+
+    def test_shallow_mixed_nesting_unchanged(self):
+        self.assertMarkdownRenders(
+            '1. First\n2. Second:\n    * Fee\n    * Fie\n    * Foe\n3. Third',
+            '<ol>\n<li>First</li>\n<li>Second:<ul>\n<li>Fee</li>\n<li>Fie</li>\n<li>Foe</li>\n</ul>\n</li>\n'
+            '<li>Third</li>\n</ol>'
+        )
+
+    def test_shallow_loose_nesting_unchanged(self):
+        self.assertMarkdownRenders(
+            '1. First\n\n2. Second:\n    * Fee\n    * Fie\n    * Foe\n\n3. Third',
+            '<ol>\n<li>\n<p>First</p>\n</li>\n<li>\n<p>Second:</p>\n<ul>\n<li>Fee</li>\n<li>Fie</li>\n'
+            '<li>Foe</li>\n</ul>\n</li>\n<li>\n<p>Third</p>\n</li>\n</ol>'
         )
